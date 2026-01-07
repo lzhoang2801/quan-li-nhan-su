@@ -21,23 +21,18 @@ class MainWindow(QMainWindow):
     def _build_ui(self):
         menubar = self.menuBar()
         file_menu = menubar.addMenu("File")
-
         export_excel_act = GuiAction("Export Excel...", self)
         export_excel_act.triggered.connect(self.on_export_excel)
         file_menu.addAction(export_excel_act)
-
         export_zip_act = GuiAction("Export dữ liệu (zip)", self)
         export_zip_act.triggered.connect(self.on_export)
         file_menu.addAction(export_zip_act)
-
         import_act = GuiAction("Import từ Excel...", self)
         import_act.triggered.connect(self.on_import_excel)
         file_menu.addAction(import_act)
-
         reset_act = GuiAction("Reset DB (clear)", self)
         reset_act.triggered.connect(self.on_reset_db)
         file_menu.addAction(reset_act)
-
         file_menu.addSeparator()
         exit_act = GuiAction("Thoát", self)
         exit_act.triggered.connect(self.close)
@@ -91,7 +86,6 @@ class MainWindow(QMainWindow):
         search_bar.addWidget(self.filter_has_docs)
         search_bar.addWidget(btn_search)
         search_bar.addWidget(btn_clear)
-
         central_layout.addLayout(search_bar)
 
         splitter = QSplitter(Qt.Horizontal)
@@ -113,17 +107,30 @@ class MainWindow(QMainWindow):
         left_btns.addWidget(btn_delete_dept)
         left_layout.addLayout(left_btns)
 
-        # Middle: members
+        # Middle: members + sort control
         mid_widget = QWidget()
         mid_layout = QVBoxLayout()
         mid_widget.setLayout(mid_layout)
         mid_header = QHBoxLayout()
         mid_header.addWidget(QLabel("<b>Thành viên</b>"))
+        # Sort combobox for members
+        self.members_sort = QComboBox()
+        self.members_sort.addItem("Mặc định (Ngày tạo ↓)", "m.created_at DESC")
+        self.members_sort.addItem("ID ↑", "m.id ASC")
+        self.members_sort.addItem("ID ↓", "m.id DESC")
+        self.members_sort.addItem("Tên A-Z", "m.full_name COLLATE NOCASE ASC")
+        self.members_sort.addItem("Tên Z-A", "m.full_name COLLATE NOCASE DESC")
+        self.members_sort.addItem("Ngày tạo ↑", "m.created_at ASC")
+        self.members_sort.addItem("Ngày tạo ↓", "m.created_at DESC")
+        self.members_sort.currentIndexChanged.connect(self.on_members_sort_changed)
+        mid_header.addStretch()
+        mid_header.addWidget(QLabel("Sắp xếp:"))
+        mid_header.addWidget(self.members_sort)
+        # compact action buttons
         btn_edit_member = QPushButton("Sửa")
         btn_edit_member.clicked.connect(self.on_edit_member)
         btn_del_member = QPushButton("Xóa")
         btn_del_member.clicked.connect(self.on_delete_member)
-        mid_header.addStretch()
         mid_header.addWidget(btn_edit_member)
         mid_header.addWidget(btn_del_member)
         mid_layout.addLayout(mid_header)
@@ -136,7 +143,7 @@ class MainWindow(QMainWindow):
         self.table_members.cellDoubleClicked.connect(self.on_member_double)
         mid_layout.addWidget(self.table_members)
 
-        # Right: details & documents
+        # Right: details & documents + sort control
         right_widget = QWidget()
         right_layout = QVBoxLayout()
         right_widget.setLayout(right_layout)
@@ -144,6 +151,22 @@ class MainWindow(QMainWindow):
         self.lbl_member_info = QLabel("(Chọn thành viên để xem chi tiết)")
         self.lbl_member_info.setWordWrap(True)
         right_layout.addWidget(self.lbl_member_info)
+
+        # docs sort combobox
+        docs_top = QHBoxLayout()
+        docs_top.addStretch()
+        docs_top.addWidget(QLabel("Sắp xếp hồ sơ:"))
+        self.docs_sort = QComboBox()
+        # default by TT then created_at desc
+        self.docs_sort.addItem("TT ↑", "tt ASC, created_at DESC")
+        self.docs_sort.addItem("TT ↓", "tt DESC, created_at DESC")
+        self.docs_sort.addItem("ID ↑", "id ASC")
+        self.docs_sort.addItem("ID ↓", "id DESC")
+        self.docs_sort.addItem("Ngày tạo ↑", "created_at ASC")
+        self.docs_sort.addItem("Ngày tạo ↓", "created_at DESC")
+        self.docs_sort.currentIndexChanged.connect(self.on_docs_sort_changed)
+        docs_top.addWidget(self.docs_sort)
+        right_layout.addLayout(docs_top)
 
         self.table_docs = QTableWidget(0, 8)
         self.table_docs.setHorizontalHeaderLabels(["TT","Số & Ký hiệu","Ngày tháng","Tên loại & trích yếu","Tác giả","Số tờ","Ghi chú","File"])
@@ -201,11 +224,14 @@ class MainWindow(QMainWindow):
     def on_dept_selected(self, item):
         dept = self.get_selected_dept()
         if dept:
-            self.load_members_for_dept(dept['id'])
+            # load members with current sort
+            order_by = self.members_sort.currentData() or "m.created_at DESC"
+            self.load_members_for_dept(dept['id'], order_by=order_by)
 
     # Members
-    def load_members_for_dept(self, dept_id):
-        members = db.list_members_by_dept(dept_id)
+    def load_members_for_dept(self, dept_id, order_by=None):
+        order_by = order_by or (self.members_sort.currentData() or "m.created_at DESC")
+        members = db.list_members_by_dept(dept_id, order_by=order_by)
         self.show_members_in_table(members)
 
     def show_members_in_table(self, members):
@@ -221,7 +247,17 @@ class MainWindow(QMainWindow):
         self.table_docs.setRowCount(0)
         self.lbl_member_info.setText("(Chọn thành viên để xem chi tiết)")
 
-    # CRUD create with optional IDs
+    def on_members_sort_changed(self, idx):
+        # reload members for current selected department or search results
+        dept = self.get_selected_dept()
+        if dept:
+            order_by = self.members_sort.itemData(idx)
+            self.load_members_for_dept(dept['id'], order_by=order_by)
+        else:
+            # if showing search results, re-run search with order_by
+            self.on_search()
+
+    # CRUD create with optional IDs (unchanged)
     def on_add_department(self):
         dlg = DepartmentDialog(self)
         if dlg.exec() == QDialog.Accepted:
@@ -254,7 +290,7 @@ class MainWindow(QMainWindow):
         if not dept:
             QMessageBox.information(self, "Chọn", "Vui lòng chọn phòng ban để xóa")
             return
-        ok = QMessageBox.question(self, "Xác nhận", f"Bạn có chắc muốn xóa phòng ban '{dept['name']}' cùng toàn bộ thành viên và hồ s�� thuộc phòng ban này?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        ok = QMessageBox.question(self, "Xác nhận", f"Bạn có chắc muốn xóa phòng ban '{dept['name']}' cùng toàn bộ thành viên và hồ sơ thuộc phòng ban này?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if ok != QMessageBox.StandardButton.Yes:
             return
         rm = QMessageBox.question(self, "Xóa files", "Bạn có muốn xóa cả file hồ sơ (PDF) trên ổ đĩa không? (Yes = xóa file, No = giữ file)", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
@@ -266,6 +302,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Lỗi", str(e))
 
+    # Member edit with ID change handled (unchanged from previous)
     def on_add_member(self):
         depts = db.list_departments()
         if not depts:
@@ -309,7 +346,19 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Thiếu", "Tên thành viên yêu cầu")
                 return
             try:
-                db.update_member(m['id'], data['full_name'], data['position'], data['email'], data['phone'], data['notes'], data['department_id'])
+                new_id = data.get('id')
+                old_id = m['id']
+                if new_id is not None and new_id != old_id:
+                    reply = QMessageBox.question(self, "Xác nhận đổi ID",
+                        f"Bạn muốn đổi ID của thành viên '{m['full_name']}' từ {old_id} sang {new_id}?\n(Thao tác sẽ cập nhật tất cả hồ sơ liên quan)",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                    if reply != QMessageBox.StandardButton.Yes:
+                        return
+                    db.change_member_id(old_id, new_id)
+                    target_id = new_id
+                else:
+                    target_id = old_id
+                db.update_member(target_id, data['full_name'], data['position'], data['email'], data['phone'], data['notes'], department_id=data['department_id'])
                 cur_dept = self.get_selected_dept()
                 if cur_dept:
                     self.load_members_for_dept(cur_dept['id'])
@@ -343,7 +392,8 @@ class MainWindow(QMainWindow):
 
     def show_member_details(self, m):
         self.lbl_member_info.setText(f"<b>{m['full_name']}</b><br/>Chức vụ: {m.get('position','')}<br/>Email: {m.get('email','')}<br/>Phone: {m.get('phone','')}<br/>Ghi chú: {m.get('notes','')}")
-        docs = db.list_documents_by_member(m['id'])
+        order_by = self.docs_sort.currentData() or 'tt ASC, created_at DESC'
+        docs = db.list_documents_by_member(m['id'], order_by=order_by)
         self.current_docs = docs
         self.table_docs.setRowCount(0)
         for r, d in enumerate(docs):
@@ -358,7 +408,7 @@ class MainWindow(QMainWindow):
             fp = d.get('file_path') or ''
             self.table_docs.setItem(r, 7, QTableWidgetItem(os.path.basename(fp) if fp else ''))
 
-    # Documents
+    # Documents handlers (unchanged)
     def get_selected_doc(self):
         sel = self.table_docs.selectedItems()
         if not sel:
@@ -380,6 +430,7 @@ class MainWindow(QMainWindow):
                 db.create_document(m['id'], tt=data['tt'], so_ky_hieu=data['so_ky_hieu'], ngay_thang=data['ngay_thang'],
                                    ten_loai_trichyeu=data['ten_loai_trichyeu'], tac_gia=data['tac_gia'],
                                    so_to=data['so_to'], ghi_chu=data['ghi_chu'], file_src_path=data['file_src'], id_=data.get('id'))
+                # reload docs using current sort
                 self.show_member_details(m)
             except Exception as e:
                 QMessageBox.critical(self, "Lỗi", str(e))
@@ -435,16 +486,18 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Lỗi mở file", str(e))
 
-    # Search / filter
+    # Search / filter (now pass order_by from members_sort)
     def on_search(self):
         name = self.search_input.text().strip()
         position = self.filter_position.text().strip()
         dept_id = self.filter_dept.currentData()
         has_docs = self.filter_has_docs.currentData()
+        order_by = self.members_sort.currentData() or 'm.created_at DESC'
         results = db.search_members(name_contains=name if name else None,
                                     position_contains=position if position else None,
                                     department_id=dept_id,
-                                    has_docs=has_docs)
+                                    has_docs=has_docs,
+                                    order_by=order_by)
         self.show_members_in_table(results)
 
     def on_clear_search(self):
@@ -452,13 +505,21 @@ class MainWindow(QMainWindow):
         self.filter_position.clear()
         self.filter_dept.setCurrentIndex(0)
         self.filter_has_docs.setCurrentIndex(0)
+        self.members_sort.setCurrentIndex(0)
+        self.docs_sort.setCurrentIndex(0)
         dept = self.get_selected_dept()
         if dept:
             self.load_members_for_dept(dept['id'])
         else:
             self.clear_member_views()
 
-    # Export / Import / Reset
+    def on_docs_sort_changed(self, idx):
+        # reload docs for currently shown member
+        m = self.get_selected_member()
+        if m:
+            self.show_member_details(m)
+
+    # Export / Import / Reset handlers (same as before)
     def on_export_excel(self):
         dest, _ = QFileDialog.getSaveFileName(self, "Export Excel (.xlsx)", os.path.expanduser("~/export_data.xlsx"), "Excel Files (*.xlsx)")
         if not dest:
