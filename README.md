@@ -6,7 +6,7 @@ Mô tả
 - CRUD Thành viên (Members) thuộc từng phòng ban.
 - Mỗi thành viên có thể có nhiều hồ sơ/tài liệu (Documents) theo format:
   TT, Số và Ký hiệu, Ngày tháng, Tên loại & trích yếu nội dung, Tác giả, Số tờ (bản), Ghi chú, Link hồ sơ (file PDF).
-- Lưu trữ lâu dài: SQLite DB tại `./data/database.sqlite`, PDF được copy vào `./data/uploads`.
+- Lưu trữ lâu dài: theo mặc định dữ liệu sẽ được lưu vào thư mục người dùng để đảm bảo **dữ liệu bền vững** khi chạy file đóng gói (EXE). Nếu chạy trực tiếp từ mã nguồn (python main.py), ứng dụng vẫn dùng `./data/database.sqlite` và `./data/uploads` trong thư mục dự án.
 - Có chức năng export (tạo zip chứa database + uploads) để bàn giao.
 - Mở file PDF bằng ứng dụng mặc định trên hệ điều hành.
 
@@ -54,8 +54,11 @@ Packaging (tạo file .exe / .app)
   - uploads/*
 
 Vị trí lưu dữ liệu
-- Database: ./data/database.sqlite
-- Uploads: ./data/uploads/
+- Trên phiên bản hiện tại (mặc định): dữ liệu được lưu vào thư mục người dùng để đảm bảo **dữ liệu bền vững** khi chạy EXE:
+  - Windows: `%LOCALAPPDATA%\\quan-li-nhan-su\\data\\database.sqlite`
+  - Unix-like: `$XDG_DATA_HOME/quan-li-nhan-su/data` hoặc `~/.local/share/quan-li-nhan-su/data`
+- Nếu bạn chạy từ mã nguồn (python main.py), ứng dụng sẽ sử dụng `./data/database.sqlite` và `./data/uploads` trong thư mục dự án.
+- Các file upload được lưu trong thư mục `uploads` bên trong thư mục data của vị trí lưu trên.
 
 Gợi ý bảo mật / mở rộng
 - Thêm quyền truy cập/role nếu cần (auth).

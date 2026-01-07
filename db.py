@@ -6,11 +6,38 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DATA_DIR = os.path.join(BASE_DIR, 'data')
+PROJECT_DATA_DIR = os.path.join(BASE_DIR, 'data')
+
+# Use per-user persistent data directory (AppData on Windows, XDG/home on Unix)
+APP_NAME = "quan-li-nhan-su"
+def _get_user_data_base():
+    if os.name == 'nt':
+        return os.getenv('LOCALAPPDATA') or os.getenv('APPDATA') or os.path.expanduser("~")
+    else:
+        return os.getenv('XDG_DATA_HOME') or os.path.expanduser("~/.local/share")
+
+USER_BASE = os.path.join(_get_user_data_base(), APP_NAME)
+DATA_DIR = os.path.join(USER_BASE, 'data')
 UPLOADS_DIR = os.path.join(DATA_DIR, 'uploads')
 DB_PATH = os.path.join(DATA_DIR, 'database.sqlite')
 
+# Ensure directories exist
+os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(UPLOADS_DIR, exist_ok=True)
+
+# If there's a bundled default DB or uploads in the project, copy them to the user data dir on first run
+try:
+    if not os.path.exists(DB_PATH) and os.path.exists(os.path.join(PROJECT_DATA_DIR, 'database.sqlite')):
+        shutil.copy2(os.path.join(PROJECT_DATA_DIR, 'database.sqlite'), DB_PATH)
+    project_uploads = os.path.join(PROJECT_DATA_DIR, 'uploads')
+    if os.path.exists(project_uploads):
+        for fname in os.listdir(project_uploads):
+            src = os.path.join(project_uploads, fname)
+            dst = os.path.join(UPLOADS_DIR, fname)
+            if os.path.isfile(src) and not os.path.exists(dst):
+                shutil.copy2(src, dst)
+except Exception:
+    pass
 
 def get_conn():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
